@@ -4,7 +4,7 @@
 // contrast against the surface) in this slot order.
 export const SERIES_COLORS = {
   pink: '#cc3aab',
-  amber: '#b88100',
+  green: '#3cca83',
   blue: '#2a8bd0',
   violet: '#5a3d99',
 } as const
