@@ -17,7 +17,7 @@ import { useRole } from '../role'
 // Each status keeps the same colour wherever it appears (badges and charts).
 const STATUS_COLORS: Record<ConversationStatus, string> = {
   open: SERIES_COLORS.pink,
-  answered: SERIES_COLORS.amber,
+  answered: SERIES_COLORS.green,
   resolved: SERIES_COLORS.blue,
   closed: SERIES_COLORS.violet,
 }
