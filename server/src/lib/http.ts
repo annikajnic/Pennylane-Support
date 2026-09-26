@@ -1,4 +1,5 @@
 import type { ErrorRequestHandler, NextFunction, Request, RequestHandler, Response } from "express";
+import type { z } from "zod";
 
 export class HttpError extends Error {
   constructor(
@@ -34,6 +35,11 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     res.status(err.status).json({ error: err.message });
     return;
   }
+  // Malformed JSON bodies from express.json().
+  if (err?.type === "entity.parse.failed") {
+    res.status(400).json({ error: "Request body must be valid JSON" });
+    return;
+  }
   console.error(err);
   res.status(500).json({ error: "Internal server error" });
 };
@@ -49,4 +55,17 @@ export function matchStoredValue(
   if (input === undefined) return undefined;
   const lower = input.toLowerCase();
   return storedValues.find((v) => v.toLowerCase() === lower) ?? input;
+}
+
+// Validates a request body against a zod schema, turning failures into a 400
+// whose message names the offending field(s).
+export function parseBody<T>(schema: z.ZodType<T>, body: unknown): T {
+  const result = schema.safeParse(body ?? {});
+  if (!result.success) {
+    const message = result.error.issues
+      .map((i) => (i.path.length ? `${i.path.join(".")}: ${i.message}` : i.message))
+      .join("; ");
+    throw new HttpError(400, message);
+  }
+  return result.data;
 }
