@@ -98,3 +98,28 @@ export type ConversationUpdate = Partial<{
   isPinned: boolean
   isLocked: boolean
 }>
+
+export interface Insights {
+  conversations: {
+    total: number
+    byStatus: Record<ConversationStatus, number>
+    unresolved: number
+    resolved: number
+    unresolvedStatuses: ConversationStatus[]
+    resolvedStatuses: ConversationStatus[]
+  }
+  resolution: {
+    averageHours: number | null
+    medianHours: number | null
+    resolvedCount: number
+    byPriority: { priority: Priority; averageHours: number | null; resolvedCount: number }[]
+  }
+  topChallenges: {
+    id: string
+    title: string
+    status: string
+    conversationCount: number
+    unresolvedCount: number
+  }[]
+  workload: { assignee: string | null; unresolvedCount: number }[]
+}

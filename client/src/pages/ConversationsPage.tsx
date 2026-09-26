@@ -102,6 +102,7 @@ export function ConversationsPage() {
           onChange={(e) => setFilter('status', e.target.value)}
         >
           <option value="">All statuses</option>
+          <option value="unresolved">Unresolved (open + answered)</option>
           {data?.facets.statuses.map((s) => (
             <option key={s} value={s}>
               {capitalize(s)}

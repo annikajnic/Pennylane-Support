@@ -2,9 +2,10 @@ import { Link, NavLink } from 'react-router-dom'
 import { useRole, type Role } from '../role'
 
 const PAGES = [
-  { to: '/challenges', label: 'Challenges', className: 'challenges' },
-  { to: '/conversations', label: 'Conversations', className: 'conversations' },
-  { to: '/insights', label: 'Insights', className: 'insights' },
+  { to: '/challenges', label: 'Challenges', className: 'challenges', supportOnly: false },
+  { to: '/conversations', label: 'Conversations', className: 'conversations', supportOnly: false },
+  // Insights are for the support team only; the API enforces this too.
+  { to: '/insights', label: 'Insights', className: 'insights', supportOnly: true },
 ]
 
 const ROLES: Role[] = ['learner', 'support']
@@ -25,7 +26,7 @@ export function NavBar() {
         </Link>
 
         <nav className="nav-links" aria-label="Main">
-          {PAGES.map((page) => (
+          {PAGES.filter((page) => role === 'support' || !page.supportOnly).map((page) => (
             <NavLink key={page.to} to={page.to} className={`nav-link ${page.className}`}>
               {page.label}
             </NavLink>

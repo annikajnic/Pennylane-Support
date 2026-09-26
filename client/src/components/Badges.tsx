@@ -21,7 +21,7 @@ const CONVERSATION_STATUS_CLASS: Record<string, string> = {
   open: 'badge-pink',
   answered: 'badge-yellow',
   resolved: 'badge-blue',
-  closed: 'badge-muted',
+  closed: 'badge-violet',
 }
 
 export function ConversationStatusBadge({ status }: { status: string }) {
