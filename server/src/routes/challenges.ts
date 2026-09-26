@@ -3,6 +3,7 @@ import type { Challenge, Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
 import { HttpError, asyncHandler, matchStoredValue, queryString } from "../lib/http.js";
 import { parseJsonArray } from "../lib/json.js";
+import { LEARNER_VISIBLE_CHALLENGE_STATUS, getRole } from "../lib/role.js";
 
 export const challengesRouter = Router();
 
@@ -41,10 +42,14 @@ challengesRouter.get(
       queryString(req.query.difficulty),
       stored.map((c) => c.difficulty),
     );
-    const status = matchStoredValue(
-      queryString(req.query.status),
-      stored.map((c) => c.status),
-    );
+    // Learners only ever see published challenges; the status filter is support-only.
+    const status =
+      getRole(req) === "support"
+        ? matchStoredValue(
+            queryString(req.query.status),
+            stored.map((c) => c.status),
+          )
+        : LEARNER_VISIBLE_CHALLENGE_STATUS;
 
     const where: Prisma.ChallengeWhereInput = {
       ...(category && { category }),
@@ -65,17 +70,26 @@ challengesRouter.get(
 challengesRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
+    const isSupport = getRole(req) === "support";
     const challenge = await prisma.challenge.findUnique({
       where: { id: req.params.id },
       include: { _count: { select: { conversations: true } } },
     });
-    if (!challenge) throw new HttpError(404, `Challenge ${req.params.id} not found`);
+    // Hidden challenges 404 for learners rather than 403, so their existence isn't leaked.
+    if (!challenge || (!isSupport && challenge.status !== LEARNER_VISIBLE_CHALLENGE_STATUS)) {
+      throw new HttpError(404, `Challenge ${req.params.id} not found`);
+    }
 
     // Resolve prerequisite IDs to titles so the UI can link to them directly.
+    // Some published challenges list draft/archived prerequisites; learners
+    // don't see those, since the links would 404 for them.
     const prerequisiteIds = parseJsonArray(challenge.prerequisiteIds);
     const prerequisites = await prisma.challenge.findMany({
-      where: { id: { in: prerequisiteIds } },
-      select: { id: true, title: true, difficulty: true },
+      where: {
+        id: { in: prerequisiteIds },
+        ...(!isSupport && { status: LEARNER_VISIBLE_CHALLENGE_STATUS }),
+      },
+      select: { id: true, title: true, difficulty: true, status: true },
       orderBy: { id: "asc" },
     });
 
