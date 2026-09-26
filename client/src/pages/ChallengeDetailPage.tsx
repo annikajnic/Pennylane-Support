@@ -104,9 +104,16 @@ export function ChallengeDetailPage() {
                   ? 'No one has asked about this challenge yet.'
                   : `${c.conversationCount} ${c.conversationCount === 1 ? 'conversation' : 'conversations'} about this challenge.`}
               </p>
-              <Link to={`/conversations?challengeId=${c.id}`} className="button">
-                View conversations
-              </Link>
+              <div className="button-row">
+                <Link to={`/conversations/new?challengeId=${c.id}`} className="button button-primary">
+                  Ask a question
+                </Link>
+                {c.conversationCount > 0 && (
+                  <Link to={`/conversations?challengeId=${c.id}`} className="button">
+                    View conversations
+                  </Link>
+                )}
+              </div>
             </section>
 
             <section className="card">
