@@ -7,6 +7,21 @@ import { LEARNER_VISIBLE_CHALLENGE_STATUS, getRole } from "../lib/role.js";
 
 export const challengesRouter = Router();
 
+const DIFFICULTY_ORDER = ["Beginner", "Intermediate", "Advanced", "Expert"];
+
+// Known levels in ascending order; anything unexpected sorts to the end.
+function byDifficulty(a: string, b: string) {
+  const rank = (d: string) => {
+    const i = DIFFICULTY_ORDER.indexOf(d);
+    return i === -1 ? DIFFICULTY_ORDER.length : i;
+  };
+  return rank(a) - rank(b);
+}
+
+function uniqueSorted(values: string[]) {
+  return [...new Set(values)].sort();
+}
+
 // List view omits the long-form fields (hints, learning objectives) to keep the
 // payload small; the detail endpoint returns everything.
 function toSummary(c: Challenge & { _count: { conversations: number } }) {
@@ -28,28 +43,28 @@ function toSummary(c: Challenge & { _count: { conversations: number } }) {
 challengesRouter.get(
   "/",
   asyncHandler(async (req, res) => {
+    const isSupport = getRole(req) === "support";
+
     // Distinct values are tiny (a dozen categories, four difficulties), so
-    // looking them up per request is cheap.
+    // looking them up per request is cheap. Scoped to what this viewer can see,
+    // so they double as the filter options returned in `facets`.
     const stored = await prisma.challenge.findMany({
+      where: isSupport ? {} : { status: LEARNER_VISIBLE_CHALLENGE_STATUS },
       select: { category: true, difficulty: true, status: true },
       distinct: ["category", "difficulty", "status"],
     });
-    const category = matchStoredValue(
-      queryString(req.query.category),
-      stored.map((c) => c.category),
-    );
-    const difficulty = matchStoredValue(
-      queryString(req.query.difficulty),
-      stored.map((c) => c.difficulty),
-    );
+    const facets = {
+      categories: uniqueSorted(stored.map((c) => c.category)),
+      difficulties: uniqueSorted(stored.map((c) => c.difficulty)).sort(byDifficulty),
+      statuses: isSupport ? uniqueSorted(stored.map((c) => c.status)) : [],
+    };
+
+    const category = matchStoredValue(queryString(req.query.category), facets.categories);
+    const difficulty = matchStoredValue(queryString(req.query.difficulty), facets.difficulties);
     // Learners only ever see published challenges; the status filter is support-only.
-    const status =
-      getRole(req) === "support"
-        ? matchStoredValue(
-            queryString(req.query.status),
-            stored.map((c) => c.status),
-          )
-        : LEARNER_VISIBLE_CHALLENGE_STATUS;
+    const status = isSupport
+      ? matchStoredValue(queryString(req.query.status), facets.statuses)
+      : LEARNER_VISIBLE_CHALLENGE_STATUS;
 
     const where: Prisma.ChallengeWhereInput = {
       ...(category && { category }),
@@ -63,7 +78,7 @@ challengesRouter.get(
       include: { _count: { select: { conversations: true } } },
     });
 
-    res.json({ items: challenges.map(toSummary), total: challenges.length });
+    res.json({ items: challenges.map(toSummary), total: challenges.length, facets });
   }),
 );
 
