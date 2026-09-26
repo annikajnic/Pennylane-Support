@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Array fields (tags, learningObjectives, hints, prerequisiteIds) are stored as
+// JSON-encoded text. SQLite has no native array type, and these values are only
+// ever read/written as a whole alongside their parent row. See README.
+model Challenge {
+  id                    String         @id // e.g. "CHAL_001"
+  title                 String
+  description           String
+  category              String
+  difficulty            String
+  points                Int
+  status                String
+  estimatedMinutes      Int
+  completionRate        Float
+  attemptCount          Int
+  averageAttemptsToPass Float
+  author                String
+  createdAt             DateTime
+  updatedAt             DateTime
+  tags                  String         @default("[]")
+  learningObjectives    String         @default("[]")
+  hints                 String         @default("[]")
+  prerequisiteIds       String         @default("[]")
+  conversations         Conversation[]
+
+  @@index([category])
+  @@index([difficulty])
+}
+
+// participantCount / participants are intentionally NOT stored — they are
+// derived from Post (DISTINCT user) so they can never drift from the posts.
+model Conversation {
+  id                  String    @id // e.g. "CONV_0001"
+  topic               String
+  category            String
+  description         String?
+  status              String    @default("open") // open | answered | resolved | closed
+  priority            String    @default("medium") // low | medium | high | urgent
+  challengeId         String
+  challenge           Challenge @relation(fields: [challengeId], references: [id])
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  lastActivityAt      DateTime  @default(now())
+  viewCount           Int       @default(0)
+  isPinned            Boolean   @default(false)
+  isLocked            Boolean   @default(false)
+  assignedTo          String?
+  resolutionTimeHours Float?
+  tags                String    @default("[]")
+  posts               Post[]
+
+  @@index([status])
+  @@index([assignedTo])
+  @@index([challengeId])
+}
+
+model Post {
+  id               Int          @id @default(autoincrement())
+  postNumber       Int // original per-conversation post_id
+  conversationId   String
+  conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user             String
+  userRole         String // learner | mentor | support | staff
+  content          String
+  timestamp        DateTime     @default(now())
+  upvotes          Int          @default(0)
+  helpful          Int          @default(0)
+  isAcceptedAnswer Boolean      @default(false)
+
+  @@unique([conversationId, postNumber])
+  @@index([user])
+}
