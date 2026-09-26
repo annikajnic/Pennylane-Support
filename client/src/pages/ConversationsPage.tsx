@@ -1,15 +1,14 @@
-import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { toQuery } from '../api/client'
 import type { ConversationList, ConversationSummary } from '../api/types'
 import { ConversationStatusBadge, PriorityBadge, Tag } from '../components/Badges'
+import { SearchInput } from '../components/SearchInput'
 import { ErrorMessage, Loading } from '../components/Status'
 import { useApi } from '../hooks/useApi'
 import { capitalize, formatDateTime, formatRelative } from '../lib/format'
 import { useRole } from '../role'
 
 const PAGE_SIZE = 20
-const SEARCH_DEBOUNCE_MS = 300
 
 // Filters and page live in the URL so views are shareable and survive
 // navigating into a conversation and back.
@@ -94,7 +93,12 @@ export function ConversationsPage() {
       )}
 
       <div className="filters">
-        <SearchInput value={search} onChange={(v) => setFilter('q', v)} />
+        <SearchInput
+          value={search}
+          onChange={(v) => setFilter('q', v)}
+          placeholder="Search topics"
+          label="Search conversations"
+        />
         <select
           className="input"
           aria-label="Status"
@@ -194,36 +198,6 @@ export function ConversationsPage() {
         </>
       )}
     </>
-  )
-}
-
-// Topic search hits the server, so typing is debounced before updating the URL.
-function SearchInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  const [draft, setDraft] = useState(value)
-  const [lastValue, setLastValue] = useState(value)
-
-  // Pick up external changes (e.g. "Clear") without an effect. Changes that
-  // came from this input are skipped so a trailing space isn't eaten mid-typing.
-  if (value !== lastValue) {
-    setLastValue(value)
-    if (value !== draft.trim()) setDraft(value)
-  }
-
-  useEffect(() => {
-    if (draft.trim() === value) return
-    const timer = setTimeout(() => onChange(draft.trim()), SEARCH_DEBOUNCE_MS)
-    return () => clearTimeout(timer)
-  }, [draft, value, onChange])
-
-  return (
-    <input
-      type="search"
-      className="input"
-      placeholder="Search topics"
-      aria-label="Search conversations"
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-    />
   )
 }
 

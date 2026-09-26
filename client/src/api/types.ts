@@ -17,6 +17,9 @@ export interface ChallengeSummary {
 export interface ChallengeList {
   items: ChallengeSummary[]
   total: number
+  page: number
+  pageSize: number
+  totalPages: number
   facets: {
     categories: string[]
     difficulties: string[]

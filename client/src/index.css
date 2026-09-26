@@ -1315,3 +1315,14 @@ a:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+
+.scroll-footer {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0 8px;
+  min-height: 72px;
+}
+
+.scroll-footer p {
+  margin: 0;
+}

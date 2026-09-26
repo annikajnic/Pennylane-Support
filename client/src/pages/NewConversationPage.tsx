@@ -8,12 +8,14 @@ import { useDisplayName } from '../hooks/useDisplayName'
 import { useRole } from '../role'
 
 const MAX_TAGS = 5
+// The picker lists every challenge in one request (the API's maximum page size).
+const CHALLENGE_PICKER_LIMIT = 200
 
 export function NewConversationPage() {
   const { role } = useRole()
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const { data: challenges, error: loadError, reload } = useApi<ChallengeList>('/challenges')
+  const { data: challenges, error: loadError, reload } = useApi<ChallengeList>(`/challenges?pageSize=${CHALLENGE_PICKER_LIMIT}`)
 
   const [challengeId, setChallengeId] = useState(params.get('challengeId') ?? '')
   const [topic, setTopic] = useState('')

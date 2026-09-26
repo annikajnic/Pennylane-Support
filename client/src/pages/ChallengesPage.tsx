@@ -1,12 +1,15 @@
-import { useMemo } from 'react'
+import { useEffect, useRef } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { toQuery } from '../api/client'
 import type { ChallengeList, ChallengeSummary } from '../api/types'
 import { DifficultyBadge, StatusBadge, Tag } from '../components/Badges'
+import { SearchInput } from '../components/SearchInput'
 import { ErrorMessage, Loading } from '../components/Status'
-import { useApi } from '../hooks/useApi'
+import { useInfiniteApi } from '../hooks/useInfiniteApi'
 import { formatMinutes, formatPercent, plainExcerpt } from '../lib/format'
 import { useRole } from '../role'
+
+const PAGE_SIZE = 24
 
 // Filters live in the URL so a filtered view can be bookmarked or shared, and
 // survives navigating to a challenge and back.
@@ -18,23 +21,22 @@ export function ChallengesPage() {
   const status = params.get('status') ?? ''
   const search = params.get('q') ?? ''
 
-  // Category/difficulty/status are filtered by the API; the text search runs
-  // client-side over the (at most ~120) results.
-  const { data, error, loading, reload } = useApi<ChallengeList>(
-    `/challenges${toQuery({ category, difficulty, status: role === 'support' ? status : undefined })}`,
+  // Filtering and search run on the server; pages are appended as the user
+  // scrolls (infinite scroll), so the page stays light as the catalogue grows.
+  const { items, firstPage, isStale, hasMore, loading, error, loadMore, retry } = useInfiniteApi<
+    ChallengeSummary,
+    ChallengeList
+  >(
+    `/challenges${toQuery({
+      category,
+      difficulty,
+      status: role === 'support' ? status : undefined,
+      q: search,
+    })}`,
+    PAGE_SIZE,
   )
-
-  const visible = useMemo(() => {
-    const items = data?.items ?? []
-    const q = search.trim().toLowerCase()
-    if (!q) return items
-    return items.filter(
-      (c) =>
-        c.title.toLowerCase().includes(q) ||
-        c.id.toLowerCase().includes(q) ||
-        c.tags.some((t) => t.toLowerCase().includes(q)),
-    )
-  }, [data, search])
+  const total = firstPage?.total ?? 0
+  const facets = firstPage?.facets
 
   function setParam(key: string, value: string) {
     const next = new URLSearchParams(params)
@@ -57,13 +59,11 @@ export function ChallengesPage() {
       </div>
 
       <div className="filters">
-        <input
-          type="search"
-          className="input"
-          placeholder="Search by title, ID, or tag"
-          aria-label="Search challenges"
+        <SearchInput
           value={search}
-          onChange={(e) => setParam('q', e.target.value)}
+          onChange={(v) => setParam('q', v)}
+          placeholder="Search by title, ID, or tag"
+          label="Search challenges"
         />
         <select
           className="input"
@@ -72,7 +72,7 @@ export function ChallengesPage() {
           onChange={(e) => setParam('category', e.target.value)}
         >
           <option value="">All categories</option>
-          {data?.facets.categories.map((c) => (
+          {facets?.categories.map((c) => (
             <option key={c}>{c}</option>
           ))}
         </select>
@@ -83,7 +83,7 @@ export function ChallengesPage() {
           onChange={(e) => setParam('difficulty', e.target.value)}
         >
           <option value="">All difficulties</option>
-          {data?.facets.difficulties.map((d) => (
+          {facets?.difficulties.map((d) => (
             <option key={d}>{d}</option>
           ))}
         </select>
@@ -95,7 +95,7 @@ export function ChallengesPage() {
             onChange={(e) => setParam('status', e.target.value)}
           >
             <option value="">All statuses</option>
-            {data?.facets.statuses.map((s) => (
+            {facets?.statuses.map((s) => (
               <option key={s} value={s}>
                 {s[0].toUpperCase() + s.slice(1)}
               </option>
@@ -109,30 +109,97 @@ export function ChallengesPage() {
         )}
       </div>
 
-      {error ? (
-        <ErrorMessage error={error} onRetry={reload} />
-      ) : !data ? (
+      {error && items.length === 0 ? (
+        <ErrorMessage error={error} onRetry={retry} />
+      ) : !firstPage ? (
         <Loading label="Loading challenges…" />
       ) : (
-        <>
+        <div className={isStale ? 'refreshing' : undefined}>
           <p className="muted result-count" aria-live="polite">
-            {visible.length} {visible.length === 1 ? 'challenge' : 'challenges'}
-            {loading && ' · updating…'}
+            {isStale
+              ? 'Updating…'
+              : `Showing ${items.length} of ${total} ${total === 1 ? 'challenge' : 'challenges'}`}
           </p>
-          {visible.length === 0 ? (
+          {items.length === 0 ? (
             <div className="empty">No challenges match these filters.</div>
           ) : (
             <ul className="challenge-grid">
-              {visible.map((c) => (
+              {items.map((c) => (
                 <li key={c.id}>
                   <ChallengeCard challenge={c} showStatus={role === 'support'} />
                 </li>
               ))}
             </ul>
           )}
-        </>
+          {!isStale && (
+            <InfiniteScrollFooter
+              hasMore={hasMore}
+              loading={loading}
+              error={error}
+              shown={items.length}
+              onLoadMore={loadMore}
+              onRetry={retry}
+            />
+          )}
+        </div>
       )}
     </>
+  )
+}
+
+// Loads the next page when the footer scrolls near the viewport. The button is
+// the keyboard/no-IntersectionObserver fallback and doubles as a status line.
+function InfiniteScrollFooter({
+  hasMore,
+  loading,
+  error,
+  shown,
+  onLoadMore,
+  onRetry,
+}: {
+  hasMore: boolean
+  loading: boolean
+  error: Error | null
+  shown: number
+  onLoadMore: () => void
+  onRetry: () => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const canAutoLoad = hasMore && !loading && !error
+
+  // Re-created after each page loads, so if the footer is still on screen
+  // (tall window, short page) the next page is requested straight away.
+  useEffect(() => {
+    const el = ref.current
+    if (!el || !canAutoLoad || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) onLoadMore()
+      },
+      { rootMargin: '400px 0px' },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [canAutoLoad, onLoadMore])
+
+  if (shown === 0) return null
+
+  return (
+    <div ref={ref} className="scroll-footer">
+      {error ? (
+        <ErrorMessage error={error} onRetry={onRetry} />
+      ) : loading ? (
+        <p className="muted" role="status">
+          Loading more…
+        </p>
+      ) : hasMore ? (
+        <button type="button" className="button" onClick={onLoadMore}>
+          Load more
+        </button>
+      ) : (
+        <p className="muted">You’ve reached the end.</p>
+      )}
+    </div>
   )
 }
 
