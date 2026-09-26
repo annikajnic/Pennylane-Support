@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { Challenge, Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
-import { HttpError, asyncHandler, queryString } from "../lib/http.js";
+import { HttpError, asyncHandler, matchStoredValue, queryString } from "../lib/http.js";
 import { parseJsonArray } from "../lib/json.js";
 
 export const challengesRouter = Router();
@@ -27,9 +27,24 @@ function toSummary(c: Challenge & { _count: { conversations: number } }) {
 challengesRouter.get(
   "/",
   asyncHandler(async (req, res) => {
-    const category = queryString(req.query.category);
-    const difficulty = queryString(req.query.difficulty);
-    const status = queryString(req.query.status);
+    // Distinct values are tiny (a dozen categories, four difficulties), so
+    // looking them up per request is cheap.
+    const stored = await prisma.challenge.findMany({
+      select: { category: true, difficulty: true, status: true },
+      distinct: ["category", "difficulty", "status"],
+    });
+    const category = matchStoredValue(
+      queryString(req.query.category),
+      stored.map((c) => c.category),
+    );
+    const difficulty = matchStoredValue(
+      queryString(req.query.difficulty),
+      stored.map((c) => c.difficulty),
+    );
+    const status = matchStoredValue(
+      queryString(req.query.status),
+      stored.map((c) => c.status),
+    );
 
     const where: Prisma.ChallengeWhereInput = {
       ...(category && { category }),

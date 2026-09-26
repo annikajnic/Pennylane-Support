@@ -37,3 +37,16 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   console.error(err);
   res.status(500).json({ error: "Internal server error" });
 };
+
+// SQLite compares text case-sensitively and Prisma's `mode: "insensitive"` isn't
+// supported there, so filters are resolved against the values actually stored:
+// "beginner" -> "Beginner". An unmatched input is returned unchanged, so the
+// query simply finds nothing rather than silently ignoring the filter.
+export function matchStoredValue(
+  input: string | undefined,
+  storedValues: string[],
+): string | undefined {
+  if (input === undefined) return undefined;
+  const lower = input.toLowerCase();
+  return storedValues.find((v) => v.toLowerCase() === lower) ?? input;
+}
