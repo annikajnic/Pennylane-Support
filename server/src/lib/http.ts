@@ -69,3 +69,19 @@ export function parseBody<T>(schema: z.ZodType<T>, body: unknown): T {
   }
   return result.data;
 }
+
+function positiveInt(value: unknown, fallback: number): number {
+  const n = Number(queryString(value));
+  return Number.isInteger(n) && n > 0 ? n : fallback;
+}
+
+// Reads ?page and ?pageSize, falling back to defaults on missing/invalid input
+// and capping the page size.
+export function parsePagination(
+  query: Record<string, unknown>,
+  { defaultPageSize, maxPageSize }: { defaultPageSize: number; maxPageSize: number },
+) {
+  const pageSize = Math.min(positiveInt(query.pageSize, defaultPageSize), maxPageSize);
+  const page = positiveInt(query.page, 1);
+  return { page, pageSize, skip: (page - 1) * pageSize };
+}

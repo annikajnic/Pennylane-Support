@@ -1,13 +1,25 @@
 import { Router } from "express";
 import type { Challenge, Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
-import { HttpError, asyncHandler, matchStoredValue, queryString } from "../lib/http.js";
+import {
+  HttpError,
+  asyncHandler,
+  matchStoredValue,
+  parsePagination,
+  queryString,
+} from "../lib/http.js";
 import { parseJsonArray } from "../lib/json.js";
+import { findIdsMatching } from "../lib/search.js";
 import { LEARNER_VISIBLE_CHALLENGE_STATUS, getRole } from "../lib/role.js";
 
 export const challengesRouter = Router();
 
 const DIFFICULTY_ORDER = ["Beginner", "Intermediate", "Advanced", "Expert"];
+
+// 24 fills whole rows of the 2- and 3-column grid. The higher cap lets
+// pickers (e.g. the new-conversation form) fetch every challenge at once.
+const DEFAULT_PAGE_SIZE = 24;
+const MAX_PAGE_SIZE = 200;
 
 // Known levels in ascending order; anything unexpected sorts to the end.
 function byDifficulty(a: string, b: string) {
@@ -66,19 +78,40 @@ challengesRouter.get(
       ? matchStoredValue(queryString(req.query.status), facets.statuses)
       : LEARNER_VISIBLE_CHALLENGE_STATUS;
 
+    const search = queryString(req.query.q);
+    const searchIds = search ? await findIdsMatching("Challenge", search) : undefined;
+
     const where: Prisma.ChallengeWhereInput = {
       ...(category && { category }),
       ...(difficulty && { difficulty }),
       ...(status && { status }),
+      ...(searchIds && { id: { in: searchIds } }),
     };
 
-    const challenges = await prisma.challenge.findMany({
-      where,
-      orderBy: { id: "asc" },
-      include: { _count: { select: { conversations: true } } },
+    const { page, pageSize, skip } = parsePagination(req.query, {
+      defaultPageSize: DEFAULT_PAGE_SIZE,
+      maxPageSize: MAX_PAGE_SIZE,
     });
 
-    res.json({ items: challenges.map(toSummary), total: challenges.length, facets });
+    const [total, challenges] = await Promise.all([
+      prisma.challenge.count({ where }),
+      prisma.challenge.findMany({
+        where,
+        orderBy: { id: "asc" },
+        skip,
+        take: pageSize,
+        include: { _count: { select: { conversations: true } } },
+      }),
+    ]);
+
+    res.json({
+      items: challenges.map(toSummary),
+      total,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      facets,
+    });
   }),
 );
 

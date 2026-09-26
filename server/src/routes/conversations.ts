@@ -15,8 +15,16 @@ import {
   toPostDto,
   withUniqueRetry,
 } from "../lib/conversations.js";
-import { HttpError, asyncHandler, matchStoredValue, parseBody, queryString } from "../lib/http.js";
+import {
+  HttpError,
+  asyncHandler,
+  matchStoredValue,
+  parseBody,
+  parsePagination,
+  queryString,
+} from "../lib/http.js";
 import { LEARNER_VISIBLE_CHALLENGE_STATUS, getRole } from "../lib/role.js";
+import { findIdsMatching } from "../lib/search.js";
 
 export const conversationsRouter = Router();
 
@@ -41,11 +49,6 @@ async function findVisibleConversation(req: Request, id: string) {
   });
   if (!conversation) throw new HttpError(404, `Conversation ${id} not found`);
   return conversation;
-}
-
-function positiveInt(value: unknown, fallback: number): number {
-  const n = Number(queryString(value));
-  return Number.isInteger(n) && n > 0 ? n : fallback;
 }
 
 const displayName = z.string().trim().min(1, "is required").max(50);
@@ -118,6 +121,7 @@ conversationsRouter.get(
         : matchStoredValue(assignedInput, facets.assignees);
     const challengeId = queryString(req.query.challengeId)?.toUpperCase();
     const search = queryString(req.query.q);
+    const searchIds = search ? await findIdsMatching("Conversation", search) : undefined;
 
     const where: Prisma.ConversationWhereInput = {
       ...scope,
@@ -126,19 +130,20 @@ conversationsRouter.get(
       ...(category && { category }),
       ...(assignedTo !== undefined && { assignedTo }),
       ...(challengeId && { challengeId }),
-      // SQLite's LIKE (used for `contains`) is case-insensitive for ASCII.
-      ...(search && { topic: { contains: search } }),
+      ...(searchIds && { id: { in: searchIds } }),
     };
 
-    const pageSize = Math.min(positiveInt(req.query.pageSize, DEFAULT_PAGE_SIZE), MAX_PAGE_SIZE);
-    const page = positiveInt(req.query.page, 1);
+    const { page, pageSize, skip } = parsePagination(req.query, {
+      defaultPageSize: DEFAULT_PAGE_SIZE,
+      maxPageSize: MAX_PAGE_SIZE,
+    });
 
     const [total, conversations] = await Promise.all([
       prisma.conversation.count({ where }),
       prisma.conversation.findMany({
         where,
         orderBy: [{ isPinned: "desc" }, { lastActivityAt: "desc" }, { id: "asc" }],
-        skip: (page - 1) * pageSize,
+        skip,
         take: pageSize,
         include: {
           challenge: { select: { id: true, title: true, status: true } },
