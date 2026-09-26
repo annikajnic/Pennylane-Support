@@ -7,6 +7,7 @@ import {
   DEFAULT_CATEGORY,
   PRIORITIES,
   RESOLVED_STATUSES,
+  UNRESOLVED_STATUSES,
   deriveParticipants,
   hoursBetween,
   nextConversationId,
@@ -23,6 +24,7 @@ const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
 // Sentinel for ?assignedTo=unassigned, since "no assignee" can't be expressed as a value.
 const UNASSIGNED = "unassigned";
+const UNRESOLVED = "unresolved";
 
 // Conversations about draft/archived challenges are support-only, consistent
 // with hiding those challenges from learners (otherwise their titles leak).
@@ -98,7 +100,15 @@ conversationsRouter.get(
       assignees: unique(stored.map((c) => c.assignedTo)),
     };
 
-    const status = matchStoredValue(queryString(req.query.status), facets.statuses);
+    // "unresolved" is a group filter (open + answered), used by the triage
+    // views and the insights workload links.
+    const statusInput = queryString(req.query.status);
+    const statusFilter: Prisma.ConversationWhereInput =
+      statusInput?.toLowerCase() === UNRESOLVED
+        ? { status: { in: UNRESOLVED_STATUSES } }
+        : statusInput
+          ? { status: matchStoredValue(statusInput, facets.statuses) }
+          : {};
     const priority = matchStoredValue(queryString(req.query.priority), facets.priorities);
     const category = matchStoredValue(queryString(req.query.category), facets.categories);
     const assignedInput = queryString(req.query.assignedTo);
@@ -111,7 +121,7 @@ conversationsRouter.get(
 
     const where: Prisma.ConversationWhereInput = {
       ...scope,
-      ...(status && { status }),
+      ...statusFilter,
       ...(priority && { priority }),
       ...(category && { category }),
       ...(assignedTo !== undefined && { assignedTo }),

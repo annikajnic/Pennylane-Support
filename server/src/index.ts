@@ -4,6 +4,7 @@ import express from "express";
 import { errorHandler, notFound } from "./lib/http.js";
 import { challengesRouter } from "./routes/challenges.js";
 import { conversationsRouter } from "./routes/conversations.js";
+import { insightsRouter } from "./routes/insights.js";
 
 const app = express();
 app.use(cors());
@@ -15,6 +16,7 @@ app.get("/health", (_req, res) => {
 
 app.use("/challenges", challengesRouter);
 app.use("/conversations", conversationsRouter);
+app.use("/insights", insightsRouter);
 
 app.use(notFound);
 app.use(errorHandler);

@@ -6,6 +6,9 @@ export const PRIORITIES = ["low", "medium", "high", "urgent"] as const;
 
 // Statuses that count as "done": these carry a resolution time, the others don't.
 export const RESOLVED_STATUSES: readonly string[] = ["resolved", "closed"];
+export const UNRESOLVED_STATUSES = CONVERSATION_STATUSES.filter(
+  (s) => !RESOLVED_STATUSES.includes(s),
+);
 
 // Forum category for conversations started from a challenge page.
 export const DEFAULT_CATEGORY = "PennyLane Challenges";
